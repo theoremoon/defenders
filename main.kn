@@ -1,0 +1,1798 @@
+var wndMain: wnd@Wnd
+var drawMain: wnd@Draw
+
+enum Mode
+	title
+	tutorial
+	next
+	start
+	game
+	clear
+	fail
+	intermission
+end enum
+
+{ 定数 }
+const winW: float :: 800.0
+const winH: float :: 480.0
+
+{ ゲームシステム定数 }
+const gameX: float :: 0.0
+const gameY: float :: 80.0
+const gameW: float :: 600.0
+const gameH: float :: 400.0
+const gameR: float :: 500.0
+const gameTitle: []char :: "Defenders"
+
+const rightX: float :: @gameX + @gameW
+
+const planetSize: float :: 400.0
+const planetR: float :: 200.0
+const planetCX: float :: @gameX + @gameW / 2.0
+const planetCY: float :: @gameY + @gameH + @planetR * 0.3
+const planetX: float :: @planetCX - @planetR
+const planetY: float :: @planetCY - @planetR
+const buildingSize: float :: 32.0
+
+const splashW: float :: @gameW
+const splashH: float :: @gameH / 2.0
+const splashX: float :: @gameX
+const splashY: float :: @gameY + (@gameH - @splashH) / 2.0
+
+const playerSize: float :: 16.0
+const playerR: float :: @gameR - @playerSize * 2.0
+
+const unit1Size: float :: 16.0
+const unit2Size: float :: 16.0
+const unit3Size: float :: 16.0
+const unitShot1Size: float :: 8.0
+const enemy1Size: float :: 16.0
+const enemy2Size: float :: 16.0
+const enemy3Size: float :: 32.0
+const enemyShot1Size: float :: 8.0
+const enemyShot2W: float :: 2.0
+const enemyShot2H: float :: @gameR - @planetR + @playerSize * 2.0
+
+const enemy1R: float :: @planetR + @enemy1Size / 2.0
+const enemy2R: float :: @planetR + @enemy2Size / 2.0
+const enemy3R: float :: @planetR + @enemy3Size / 2.0
+
+const pi2: float :: lib@pi * 2.0
+const mainFontSize: int :: 10
+const largeFontSize: int :: 20
+const largeXFontSize: int :: 30
+
+const bgW: float :: 800.0
+const bgH: float :: 480.0
+
+const hitSound: []char :: "res/hit.wav"
+const damageSound: []char :: "res/damage.wav"
+const badSound: []char :: "res/bad.wav"
+const beamSound: []char :: "res/beam_se.wav"
+
+const mainBGM: []char :: "res/bgm1.ogg"
+const turtleBGM: []char :: "res/bgm2.ogg"
+
+const turtleMaxLife: int :: 100
+const turtleSize: float :: 32.0
+const turtleR: float :: @planetR + @turtleSize / 2.0
+
+{ ゲームシステム変数 }
+var mainFont: draw@Font
+var mainTFont: draw@Font
+var largeFont: draw@Font
+var largeBFont: draw@Font
+var largeXFont: draw@Font
+
+var effectSounds: list<snd@Snd>
+
+var areaNames: [][]char
+var areaA: float
+
+var planetDA: float
+var planetA: float
+var planetTex: draw@Tex
+var planet1Tex: draw@Tex
+var planet2Tex: draw@Tex
+var planet3Tex: draw@Tex
+var buildingTex: draw@Tex
+var building1Tex: draw@Tex
+var building2Tex: draw@Tex
+
+var player: @P
+var maxPlayerLife: int
+var isPlayerDamaged: int
+var playerTex: draw@Tex
+
+var unit1Tex: draw@Tex
+var unit1Generator: @UnitGenerator
+var unit2Tex: draw@Tex
+var unit2Generator: @UnitGenerator
+var unit3Tex: draw@Tex
+var unit3Generator: @UnitGenerator
+var unit4Generator: @UnitGenerator
+
+var units: []list<@O>
+var unitGenerators: []@UnitGenerator
+var generatorIndex: int
+
+var enemy1Tex: draw@Tex
+var enemy2Tex: draw@Tex
+{ var enemy3Tex: draw@Tex }
+var enemies: []list<@O>
+
+var unitShot1Tex: draw@Tex
+var unitShots: []list<@Shot>
+var enemyShot1Tex: draw@Tex
+var enemyShot2Tex: draw@Tex
+var enemyShots: []list<@Shot>
+
+var maxTime: int
+var startTime: int
+var currentTime: int
+
+var sinryakuGoal: int
+var sinryaku: []int
+var startEnemyNums: []int
+var enemyNums: []int
+
+var stageNum: int
+var stageTitle: []char
+var mode: @Mode
+
+var intermissionCnt: int
+var intermissionSerifs: [][]char
+
+var fadeCount: int
+
+var adviceCharCount: int
+var adviceCount: int
+var advices: [][]char
+var adviceIndex: int
+var adviceFunc: func<(): int>
+
+var isClearFunc: func<(): bool>
+var isAreaClearFunc: func<(int): bool>
+var isLoseFunc: func<(): bool>
+var nextInitFunc: func<()>
+
+var background: draw@Tex
+
+var frameCount: int
+var isTutorial: bool
+
+var updateFunc: func<()>
+var drawFunc: func<()>
+
+var turtleLife: int
+var turtleHeadTex: draw@Tex
+var turtleTaleTex: draw@Tex
+var turtleLegTex: draw@Tex
+var isTurtleAttack: bool
+var isTurtleGuard: bool
+
+var bgm: snd@Snd
+
+{ 便利関数 }
+func upperBound(xs: []kuin@Class, x: kuin@Class): int
+	var l: int :: 0
+	var r: int :: ^xs
+	while(l < r)
+		var m: int :: (l + r) / 2
+		var c: int :: x.cmp(xs[m])
+		if(c = -1)
+			do r :: m
+		else
+			do l :: m + 1
+		end if
+	end while
+	ret l
+end func
+
+func lowerBound(xs: []kuin@Class, x: kuin@Class): int
+	var l: int :: 0
+	var r: int :: ^xs
+	while(l < r)
+		var m: int :: (l + r) / 2
+		var c: int :: x.cmp(xs[m])
+		if(c = 1)
+			do l :: m + 1
+		else
+			do r :: m
+		end if
+	end while
+	ret l
+end func
+
+class UnitGenerator()
+	+var generator: func<(float, float): @O>
+	+var w: float
+	+var h: float
+	+var tex: draw@Tex
+	+var name: []char
+	+var desc: []char
+	+var max_energy: int
+	+var recover_amount: int
+	+var recover_freq: int
+	+var current_energy: int
+end class
+
+func makeUnitGenerator(generator: func<(float, float): @O>, name: []char, desc: []char, tex: draw@Tex, w: float, h: float, max_energy: int, recover_amount: int, recover_freq: int): @UnitGenerator
+	var g: @UnitGenerator :: #@UnitGenerator
+	do g.generator :: generator
+	do g.name :: name
+	do g.desc :: desc
+	do g.tex :: tex
+	do g.w :: w
+	do g.h :: h
+	do g.max_energy :: max_energy
+	do g.recover_amount :: recover_amount
+	do g.recover_freq :: recover_freq
+	ret g
+end func
+
+{ オブジェクト型 }
+class O()
+	+var a: float
+	+var r: float
+	var damage: int
+	var life: int
+	var size: float
+	
+	+*func cmp(t: @O): int
+		if(me.getA() > t.getA())
+			ret 1
+		elif(me.getA() < t.getA())
+			ret - 1
+		else
+			ret 0
+		end if
+	end func
+	
+	+func getA(): float
+		ret(me.a % @pi2 + @pi2) % @pi2
+	end func
+	
+	+func getR(): float
+		ret me.r
+	end func
+	
+	+func getLife(): int
+		ret me.life
+	end func
+	
+	+func addDamage(d: int)
+		do me.life :- d
+	end func
+	
+	+func getSize(): float
+		ret me.size
+	end func
+	
+	+func getTex(): draw@Tex
+	end func
+	
+	+func getXY(a: float, cx: float, cy: float, x: &float, y: &float)
+		do a :: me.a + a
+		do x :: cx + me.r * lib@cos(a)
+		do y :: cy + me.r * lib@sin(a)
+	end func
+	
+	+func draw(a: float, x: float, y: float)
+		do a :: me.a + a
+		var s: float :: me.getSize() / 2.0
+		do me.getTex().drawRot(x - s, y - s, me.getSize(), me.getSize(), 0.0, 0.0, me.getSize(), me.getSize(), s, s, a + lib@pi / 2.0, draw@white)
+	end func
+	
+	+func update(i: int)
+	end func
+	
+	+func isOut(): bool
+		if(me.getR() <= @planetR | @gameR <= me.getR())
+			ret true
+		end if
+	end func
+	
+	+func onOut(i: int)
+	end func
+	
+	+func isDead(): bool
+		if(me.life <= 0)
+			ret true
+		end if
+		ret false
+	end func
+	
+	+func onDead(i: int)
+	end func
+	
+	+func isHit(o: @O): bool
+		var r1: float :: me.getR()
+		var r2: float :: o.getR()
+		var a1: float :: me.getA()
+		var a2: float :: o.getA()
+		var s1: float :: me.getSize() * 0.5 { 半径がほしい }
+		var s2: float :: o.getSize() * 0.5
+		var d: float :: r1 * r1 + r2 * r2 - 2.0 * r1 * r2 * lib@cos(a2 - a1)
+		ret d <= (s1 + s2) * (s1 + s2)
+	end func
+	
+	+func onHit(o: @O)
+		do o.addDamage(me.damage)
+	end func
+end class
+
+
+func updateObjects(os: []list<@O>)
+	for i(0, ^@areaNames - 1)
+		do os[i].head()
+		while(!os[i].term())
+			do os[i].get().update(i)
+			if(os[i].get().isOut())
+				do os[i].get().onOut(i)
+				do os[i].del()
+			elif(os[i].get().isDead())
+				do os[i].get().onDead(i)
+				do os[i].del()
+			else
+				do os[i].next()
+			end if
+		end while
+	end for
+end func
+
+func drawObjects(os: []list<@O>)
+	for i(0, ^@areaNames - 1)
+		do os[i].head()
+		var a: float :: @planetA + (i $ float) * @areaA
+		while(!os[i].term())
+			var x: float
+			var y: float
+			do os[i].get().getXY(a, @planetCX, @planetCY, &x, &y)
+			do os[i].get().draw(a, x, y)
+			do os[i].next()
+		end while
+	end for
+end func
+
+{ プレイヤー }
+class P(@O)
+	var da: float
+	var cnt: int
+	*func ctor()
+		do super(me)
+		do me.size :: @playerSize
+		do me.da :: lib@toRad(1.0)
+		do me.damage :: 1
+		do me.life :: @maxPlayerLife
+		do me.cnt :: 0
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @playerTex
+	end func
+	
+	+*func update(i: int)
+		do me.cnt :+ 1
+		
+		{ 移動 }
+		if(input@pad(0, %left) > 0)
+			do me.a :- me.da
+		end if
+		if(input@pad(0, %right) > 0)
+			do me.a :+ me.da
+		end if
+		do me.a :: me.a.clamp(lib@pi * (8.0 / 6.0), lib@pi * (10.0 / 6.0))
+		
+		{ Unit生成 }
+		if(input@pad(0, %a) = 1)
+			if(@unitGenerators[@generatorIndex].current_energy > 0)
+				var a: int :: me.getArea()
+				var g: func<(float, float): @O> :: @unitGenerators[@generatorIndex].generator
+				do @units[a].add(g(me.getAofArea(), me.r - me.getSize()))
+				do @unitGenerators[@generatorIndex].current_energy :- 1
+			else
+				do @playSE("res/bad.wav")
+			end if
+		end if
+	end func
+	
+	func getRawA(): float
+		ret(me.a % @pi2 + @pi2) % @pi2
+	end func
+	
+	{ プレイヤーがいる領域番号を返す }
+	+func getArea(): int
+		var a: float :: (@pi2 - @planetA + me.getRawA()) { 天体の回転はindexと逆方向なので 2pi から引いている }
+		ret(((a % @pi2 + @pi2) % @pi2 / @areaA) $ int) % (^@areaNames) { 一瞬 6が入るので}
+	end func
+	
+	+*func getA(): float
+		ret me.getAofArea()
+	end func
+	
+	+*func addDamage(d: int)
+		do @isPlayerDamaged :: 10
+		do me.life :- d
+	end func
+	
+	{ プレイヤーの領域内での角度を返す }
+	+func getAofArea(): float
+		var a: float :: (@planetA - me.getRawA())
+		ret @areaA - ((a % @pi2 + @pi2) % @pi2 % @areaA)
+	end func
+end class
+
+func makePlayer(): @P
+	var p: @P :: #@P
+	do p.a :: lib@pi * 1.5
+	do p.r :: @playerR
+	ret p
+end func
+
+class U(@O)
+	+*func onOut(i: int)
+		do @sinryaku[i] :+ 1
+	end func
+end class
+
+func initUnits()
+	do @units :: #[^@areaNames]list<@O>
+	for i(0, ^@areaNames - 1)
+		do @units[i] :: #list<@O>
+	end for
+end func
+
+{ 味方機1 }
+class Unit1(@U)
+	var da: float
+	var dr: float
+	
+	*func ctor()
+		do super(me)
+		do me.size :: @unit1Size
+		do me.da :: lib@toRad(1.0)
+		do me.dr :: -5.0
+		do me.life :: 1
+		do me.damage :: 1
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @unit1Tex
+	end func
+	
+	+*func update(i: int)
+		{ とりあえず左右に揺れ動きながら落ちて行く処理 }
+		do me.a :+ me.da
+		if(me.getA() <= 0.0 | @areaA <= me.getA())
+			do me.da :* -1.0
+			do me.r :+ me.dr
+		end if
+		do me.a :: me.a.clamp(0.0, @areaA)
+		
+		{ 確率で弾を撃つ }
+		if(lib@rnd(0, 50) = 0)
+			do @unitShots[i].add(@makeUnitShot1(me.a, me.r))
+		end if
+	end func
+end class
+
+func makeUnit1(a: float, r: float): @Unit1
+	var u: @Unit1 :: #@Unit1
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+
+{ 味方機2: 下方に突っ込んでいくだけ }
+class Unit2(@U)
+	var da: float
+	var dr: float
+	
+	*func ctor()
+		do super(me)
+		do me.size :: @unit1Size
+		do me.da :: 0.0
+		do me.dr :: -0.5
+		do me.life :: 1
+		do me.damage :: 1
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @unit2Tex
+	end func
+	
+	+*func update(i: int)
+		do me.r :+ me.dr
+	end func
+end class
+
+func makeUnit2(a: float, r: float): @Unit2
+	var u: @Unit2 :: #@Unit2
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+{ 味方機3: 盾 }
+class Unit3(@U)
+	var da: float
+	var dr: float
+	var cnt: int
+	
+	*func ctor()
+		do super(me)
+		do me.size :: @unit1Size
+		do me.da :: lib@toRad(0.1)
+		do me.dr :: -0.5
+		do me.life :: 3
+		do me.damage :: 1
+		do me.cnt :: 0
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @unit3Tex
+	end func
+	
+	+*func update(i: int)
+		if(me.cnt < 20)
+			do me.cnt :+ 1
+			do me.r :+ me.dr
+		else
+			do me.a :+ me.da
+			if(me.getA() <= 0.0 | @areaA <= me.getA())
+				do me.da :* -1.0
+				do me.r :+ me.dr
+			end if
+			do me.a :: me.a.clamp(0.0, @areaA)
+		end if
+	end func
+end class
+
+func makeUnit3(a: float, r: float): @Unit3
+	var u: @Unit3 :: #@Unit3
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+{ 味方機4: 弾 }
+class Unit4(@U)
+	
+	*func ctor()
+		do super(me)
+		do me.size :: @unit1Size
+	end func
+	
+	+*func isDead(): bool
+		ret true
+	end func
+	
+	+*func update(i: int)
+		do @unitShots[i].add(@makeUnitShot1(me.a, me.r))
+	end func
+	
+	+*func draw(a: float, x: float, y: float)
+	end func
+end class
+
+func makeUnit4(a: float, r: float): @Unit4
+	var u: @Unit4 :: #@Unit4
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+
+class E(@O)
+	+*func onDead(i: int)
+		do @enemyNums[i] :- 1
+	end func
+end class
+
+func initEnemies()
+	do @enemies :: #[^@areaNames]list<@O>
+	for i(0, ^@areaNames - 1)
+		do @enemies[i] :: #list<@O>
+	end for
+end func
+
+{ 敵機1 }
+class Enemy1(@E)
+	var da: float
+	*func ctor()
+		do super(me)
+		do me.size :: @enemy1Size
+		do me.life :: 2
+		do me.da :: lib@toRad(1.0)
+		do me.damage :: 1
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @enemy1Tex
+	end func
+	
+	+*func update(i: int)
+		{ とりあえず左右に揺れ動く処理 }
+		do me.a :+ me.da
+		if(me.getA() <= 0.0 | @areaA <= me.getA())
+			do me.da :* -1.0
+		end if
+		do me.a :: me.a.clamp(0.0, @areaA)
+		
+		{ 確率で弾を撃つ }
+		if(lib@rnd(0, 99) = 0)
+			do @enemyShots[i].add(@makeEnemyShot1(me.a, me.r))
+		end if
+	end func
+end class
+
+func makeEnemy1(a: float, r: float): @Enemy1
+	var u: @Enemy1 :: #@Enemy1
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+
+{ 敵機2 }
+class Enemy2(@E)
+	var cnt: int
+	*func ctor()
+		do super(me)
+		do me.size :: @enemy2Size
+		do me.life :: 1
+		do me.damage :: 1
+		do me.cnt :: lib@rnd(0, 100)
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @enemy2Tex
+	end func
+	
+	+*func update(i: int)
+		do me.cnt :+ 1
+		{ 弾を撃つ }
+		if(me.cnt % 100 = 0)
+			do me.cnt :: 0
+			do @enemyShots[i].add(@makeEnemyShot2(me, me.a, me.r))
+		end if
+	end func
+end class
+
+func makeEnemy2(a: float, r: float): @Enemy2
+	var u: @Enemy2 :: #@Enemy2
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+
+class TurtleHead(@E)
+	
+	var is: bool
+	*func ctor()
+		do super(me)
+		do me.size :: @turtleSize
+		do me.damage :: 1
+		do me.is :: true
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @turtleHeadTex
+	end func
+	
+	+*func update(i: int)
+		do me.is :: @sinryaku[i] < @sinryakuGoal
+		
+		if(@isTurtleGuard & me.is)
+			do me.r :: @planetR
+		else
+			do me.r :: @turtleR
+		end if
+		
+		if(@isTurtleAttack & me.is)
+			do @enemyShots[i].add(@makeEnemyShot2(me, me.a, me.r))
+			do @enemyShots[i].add(@makeEnemyShot2(me, me.a + lib@toRad(0.1), me.r))
+			do @enemyShots[i].add(@makeEnemyShot2(me, me.a - lib@toRad(0.1), me.r))
+		end if
+	end func
+	
+	+*func addDamage(d: int)
+		if(!@isTurtleGuard & me.is)
+			do @turtleLife :- d * 2
+		end if
+	end func
+	
+	+*func isOut(): bool
+		ret false
+	end func
+	
+	+*func isDead(): bool
+		ret @turtleLife <= 0
+	end func
+end class
+
+class TurtleTale(@TurtleHead)
+	+*func getTex(): draw@Tex
+		ret @turtleTaleTex
+	end func
+	
+	+*func update(i: int)
+		do me.is :: @sinryaku[i] < @sinryakuGoal
+		
+		if(@isTurtleGuard & me.is)
+			do me.r :: @planetR
+		else
+			do me.r :: @turtleR
+		end if
+	end func
+end class
+
+class TurtleLeg(@TurtleHead)
+	+*func getTex(): draw@Tex
+		ret @turtleLegTex
+	end func
+	
+	+*func update(i: int)
+		do me.is :: @sinryaku[i] < @sinryakuGoal
+		
+		if(@isTurtleGuard & me.is)
+			do me.r :: @planetR
+		else
+			do me.r :: @turtleR
+		end if
+		
+		if(@isTurtleAttack & me.is)
+			var n: int :: lib@rnd(3, 7)
+			var da: float :: @areaA / (n $ float)
+			var a: float :: da + da
+			for j(0, n)
+				do @enemyShots[i].add(@makeEnemyShot1(a, me.r))
+				do a :+ da
+			end for
+		end if
+	end func
+	
+	+*func addDamage(d: int)
+		if(!@isTurtleGuard & me.is)
+			do @turtleLife :- d
+		end if
+	end func
+end class
+
+func makeTurtleHead(a: float, r: float): @TurtleHead
+	var u: @TurtleHead :: #@TurtleHead
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+func makeTurtleTale(a: float, r: float): @TurtleTale
+	var u: @TurtleTale :: #@TurtleTale
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+func makeTurtleLeg(a: float, r: float): @TurtleLeg
+	var u: @TurtleLeg :: #@TurtleLeg
+	do u.a :: a
+	do u.r :: r
+	ret u
+end func
+
+{ 弾 }
+class Shot(@O)
+	var w: float
+	var h: float
+	
+	*func ctor()
+		do super(me)
+		do me.life :: 1
+		do me.damage :: 1
+	end func
+	
+	+*func draw(a: float, x: float, y: float)
+		do a :: me.a + a
+		do me.getTex().drawRot(x - me.w / 2.0, y - me.h / 2.0, me.w, me.h, 0.0, 0.0, me.w, me.h, me.w / 2.0, me.h / 2.0, a + lib@pi / 2.0, draw@white)
+	end func
+end class
+
+func initShots()
+	do @unitShots :: #[^@areaNames]list<@Shot>
+	for i(0, ^@areaNames - 1)
+		do @unitShots[i] :: #list<@Shot>
+	end for
+	do @enemyShots :: #[^@areaNames]list<@Shot>
+	for i(0, ^@areaNames - 1)
+		do @enemyShots[i] :: #list<@Shot>
+	end for
+end func
+
+{ 味方弾1 }
+class UnitShot1(@Shot)
+	var dr: float
+	*func ctor()
+		do super(me)
+		do me.w :: @unitShot1Size
+		do me.h :: @unitShot1Size
+		do me.size :: @unitShot1Size
+		do me.dr :: -5.0
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @unitShot1Tex
+	end func
+	
+	+*func update(i: int)
+		do me.r :+ me.dr
+	end func
+	
+	+*func onHit(o: @O)
+		do super(me, o)
+		do @playSE(@hitSound)
+	end func
+end class
+
+func makeUnitShot1(a: float, r: float): @UnitShot1
+	var s: @UnitShot1 :: #@UnitShot1
+	do s.a :: a
+	do s.r :: r
+	ret s
+end func
+
+
+
+{ 敵弾 1}
+class EnemyShot1(@Shot)
+	var dr: float
+	*func ctor()
+		do super(me)
+		do me.dr :: 5.0
+		do me.w :: @enemyShot1Size
+		do me.h :: @enemyShot1Size
+		do me.size :: @enemyShot1Size
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @enemyShot1Tex
+	end func
+	
+	+*func update(i: int)
+		do me.r :+ me.dr
+	end func
+	
+	+*func onHit(o: @O)
+		do super(me, o)
+		do @playSE(@badSound)
+	end func
+end class
+
+func makeEnemyShot1(a: float, r: float): @EnemyShot1
+	var s: @EnemyShot1 :: #@EnemyShot1
+	do s.a :: a
+	do s.r :: r
+	ret s
+end func
+
+{ 敵弾2 (ビーム) }
+class EnemyShot2(@Shot)
+	+var parent: @O
+	var lifecnt: int
+	*func ctor()
+		do super(me)
+		do me.w :: @enemyShot2W
+		do me.h :: @enemyShot2H
+		do me.size :: @enemyShot1Size
+		do me.lifecnt :: 40
+		do me.r :+ @enemyShot1Size
+	end func
+	
+	+*func getTex(): draw@Tex
+		if(me.lifecnt > 10)
+			ret @enemyShot1Tex
+		else
+			ret @enemyShot2Tex
+		end if
+	end func
+	
+	+*func update(i: int)
+		do me.lifecnt :- 1
+	end func
+	
+	+*func isOut(): bool
+		ret me.lifecnt <= 0
+	end func
+	
+	
+	{ レーザーは親の動きに追従するので }
+	+*func getXY(a: float, cx: float, cy: float, x: &float, y: &float)
+		do super(me, a, cx, cy, &x, &y)
+	end func
+	
+	+*func getA(): float
+		ret me.parent.getA()
+	end func
+	
+	{ レーザーなので同じ直線上（＝同じA）にいるとあたる }
+	+*func isHit(o: @O): bool
+		if(me.lifecnt > 10)
+			ret false
+		else
+			var d: float :: me.getA() - o.getA()
+			ret d.abs() <= 0.01
+		end if
+	end func
+	
+	+*func draw(a: float, x: float, y: float)
+		if(me.lifecnt <= 10)
+			do a :: me.getA() + a
+			do me.getTex().drawRot(x, y, me.w, me.h, 0.0, 0.0, me.w, me.h, 0.0, 0.0, a - lib@pi / 2.0, draw@white)
+		end if
+		var s: float :: @enemyShot1Size
+		var r: float :: 16.0
+		do @enemyShot1Tex.drawRot(x - r / 2.0, y - r / 2.0, r, r, 0.0, 0.0, s, s, s / 2.0, s / 2.0, a, draw@white)
+	end func
+	
+	+*func onHit(o: @O)
+		do super(me, o)
+		do @playSE(@beamSound)
+	end func
+end class
+
+func makeEnemyShot2(parent: @O, a: float, r: float): @EnemyShot2
+	var s: @EnemyShot2 :: #@EnemyShot2
+	do s.a :: a
+	do s.r :: r
+	do s.parent :: parent
+	ret s
+end func
+
+
+{ 当たり判定 }
+func checkHit(objs: []list<@O>, shotsList: &[]list<@Shot>)
+	{ 弾を a によって sort しておく}
+	var shots: [][]@Shot :: #[^@areaNames][]@Shot
+	for i(0, ^@areaNames - 1)
+		do shots[i] :: shotsList[i].toArray()
+		do shots[i].sort()
+	end for
+	
+	for i(0, ^@areaNames - 1)
+		if(^objs[i] = 0 | ^shots[i] = 0)
+			skip i
+		end if
+		do objs[i].head()
+		while(!objs[i].term())
+			var e: @O :: objs[i].get()
+			var l: int :: @lowerBound(shots[i], e)
+			var r: int :: @upperBound(shots[i], e)
+			if(r = ^shots[i])
+				do r :: r - 1
+			end if
+			for j(l, r)
+				if(shots[i][j].isHit(e))
+					do e.onHit(shots[i][j])
+					do shots[i][j].onHit(e)
+				end if
+			end for
+			do objs[i].next()
+			
+		end while
+	end for
+	
+	do shotsList :: #[^@areaNames]list<@Shot>
+	for i(0, ^@areaNames - 1)
+		do shotsList[i] :: #list<@Shot>
+		for j(0, ^shots[i] - 1)
+			do shotsList[i].add(shots[i][j])
+		end for
+	end for
+end func
+
+func checkPlayerHit(shotsList: &[]list<@Shot>)
+	var area: int :: @player.getArea()
+	{ 弾を a によって sort しておく}
+	var shots: []@Shot :: shotsList[area].toArray()
+	do shots.sort()
+	
+	var l: int :: @lowerBound(shots, @player)
+	var r: int :: @upperBound(shots, @player)
+	
+	if(r = ^shots)
+		do r :: r - 1
+	end if
+	for j(l, r)
+		if(shots[j].isHit(@player))
+			do @player.onHit(shots[j])
+			do shots[j].onHit(@player)
+		end if
+	end for
+	
+	do shotsList[area] :: #list<@Shot>
+	for i(0, ^shots - 1)
+		do shotsList[area].add(shots[i])
+	end for
+end func
+
+
+
+{ 縁取り文字の描画 }
+func richText(f: draw@Font, s: []char, x: float, y: float, c1: int, c2: int)
+	var dx: []float :: [-1.0, 0.0, 1.0, -1.0, 1.0, -1.0, 0.0, 1.0]
+	var dy: []float :: [-1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0, 1.0]
+	for i(0, ^dx - 1)
+		do f.draw(x + dx[i], y + dy[i], s, c2)
+	end for
+	do f.draw(x, y, s, c1)
+end func
+
+
+{*bold* と \n ができる, alpha と len で表示長さ、透明度が指定できる  }
+func drawText(x: float, y: float, w: float, text: []char, alpha: int, len: int, fontSize: int, font: draw@Font, bold: draw@Font)
+	var cx: float :: 0.0
+	var cy: float :: 0.0
+	var is_bold: bool :: false
+	do alpha :: alpha.clamp(0, 255)
+	var i: int :: 0
+	while(i < lib@min(len, ^text))
+		if(text[i] = '*')
+			do is_bold :: !is_bold
+		elif(text[i] = '\n')
+			do cx :: 0.0
+			do cy :+ (fontSize $ float) * 1.5
+		else
+			if(cx + (fontSize $ float) >= w & text[i] <> '。' & text[i] <> '」')
+				do cx :: 0.0
+				do cy :+ (fontSize $ float) * 1.5
+			end if
+			if(is_bold)
+				do bold.draw(x + cx, y + cy, text[i].toStr(), 0xFFFFFF + alpha * 16777216)
+			else
+				do font.draw(x + cx, y + cy, text[i].toStr(), 0xFFFFFF + alpha * 16777216)
+			end if
+			do cx :+ (fontSize $ float) * 1.35
+		end if
+		do i :+ 1
+	end while
+end func
+
+
+{ 天体周り }
+func updatePlanet()
+	do @planetA :: ((@planetA + @planetDA) % @pi2 + @pi2) % @pi2
+end func
+
+func drawBackground()
+	do @background.drawScale(0.0, 0.0, @winW, @winH, 0.0, 0.0, @bgW, @bgH, draw@white)
+end func
+
+func drawPlanet()
+	do @planetTex.drawRot(@planetX, @planetY, @planetR * 2.0, @planetR * 2.0, 0.0, 0.0, @planetSize, @planetSize, @planetR, @planetR, @planetA, draw@white)
+	
+	{ 領域の描画 }
+	var n: int :: ^@areaNames
+	var a1: float :: 2.0 * lib@pi / (n $ float)
+	for i(0, n - 1)
+		{ 境界線 }
+		var a: float :: @planetA + a1 * (i $ float)
+		do draw@line(@planetCX, @planetCY, @planetCX + @planetR * lib@cos(a), @planetCY + @planetR * lib@sin(a), draw@white)
+		
+		{ 領域名 }
+		var a2: float :: a + a1 * 0.5
+		do @richText(@mainFont, @areaNames[i], @planetCX + @planetR * 0.5 * lib@cos(a2), @planetCY + @planetR * 0.5 * lib@sin(a2), draw@white, 0xFF0000FF)
+		
+		{ 建物の描画 }
+		var s: int :: 10 * @sinryaku[i] / @sinryakuGoal
+		var rd: lib@Rnd :: lib@makeRnd(10 + i)
+		for j(0, 10 - s - 1)
+			var a3: float :: a + a1 / 10.0 * (j $ float)
+			var l: float :: rd.rndFloat(@planetR * 0.5, @planetR)
+			do @buildingTex.drawRot(@planetCX + l * lib@cos(a3) - @buildingSize / 2.0, @planetCY + l * lib@sin(a3) - @buildingSize / 2.0, @buildingSize, @buildingSize, 0.0, 0.0, @buildingSize, @buildingSize, @buildingSize / 2.0, @buildingSize / 2.0, a3 + lib@pi * 0.5, draw@white)
+		end for
+	end for
+end func
+
+func playSE(s: []char)
+	var se: snd@Snd :: snd@makeSnd(s, false)
+	do se.play()
+	do @effectSounds.add(se)
+end func
+
+
+func main()
+	do @wndMain :: wnd@makeWnd(null, %aspect, @winW $ int, @winH $ int, "Title")
+	do @drawMain :: wnd@makeDraw(@wndMain, 0, 0, @winW $ int, @winH $ int, %scale, %scale, false)
+	
+	do @mainFont :: draw@makeFont("Meiryo UI", @mainFontSize, true, false, true, 0.0)
+	do @mainTFont :: draw@makeFont("Meiryo UI", @mainFontSize, false, false, true, 0.0)
+	do @largeFont :: draw@makeFont("Meiryo UI", @largeFontSize, false, false, true, 0.0)
+	do @largeBFont :: draw@makeFont("Meiryo UI", @largeFontSize, true, false, true, 0.0)
+	do @largeXFont :: draw@makeFont("Meiryo UI", @largeXFontSize, true, false, true, 0.0)
+	do @areaNames :: ["A", "B", "C", "D", "E", "F"]
+	do @areaA :: @pi2 / ((^@areaNames) $ float)
+	do @playerTex :: draw@makeTex("res/player.png")
+	do @unit1Tex :: draw@makeTex("res/unit1.png")
+	do @unit1Generator :: @makeUnitGenerator(@makeUnit1, "殲滅ユニット", "横に移動しながら弾を撃ち、敵を殲滅します", @unit1Tex, @unit1Size, @unit1Size, 20, 1, 60)
+	do @unit2Tex :: draw@makeTex("res/unit2.png")
+	do @unit2Generator :: @makeUnitGenerator(@makeUnit2, "侵略ユニット", "一直線に地上を目指し、侵略します", @unit2Tex, @unit2Size, @unit2Size, 5, 1, 60)
+	do @unit3Tex :: draw@makeTex("res/guard.png")
+	do @unit3Generator :: @makeUnitGenerator(@makeUnit3, "防御ユニット", "ゆっくりと降下し、盾になります", @unit3Tex, @unit3Size, @unit3Size, 10, 1, 60)
+	do @unitShot1Tex :: draw@makeTex("res/unitshot1.png")
+	{ ここじゃないとテクスチャがない }
+	do @unit4Generator :: @makeUnitGenerator(@makeUnit4, "エネルギー弾", "", @unitShot1Tex, @unitShot1Size, @unitShot1Size, 10, 1, 60)
+	do @enemy1Tex :: draw@makeTex("res/enemy1.png")
+	do @enemy2Tex :: draw@makeTex("res/enemy2.png")
+	do @enemyShot1Tex :: draw@makeTex("res/enemyshot1.png")
+	do @enemyShot2Tex :: draw@makeTex("res/beam.png")
+	do @turtleHeadTex :: draw@makeTex("res/turtle_head.png")
+	do @turtleTaleTex :: draw@makeTex("res/turtle_tale.png")
+	do @turtleLegTex :: draw@makeTex("res/turtle_arm.png")
+	do @background :: draw@makeTex("res/background.png")
+	do @planet1Tex :: draw@makeTex("res/takoyaki.png")
+	do @planet2Tex :: draw@makeTex("res/uni.png")
+	do @planet3Tex :: draw@makeTex("res/turtle.png")
+	do @building1Tex :: draw@makeTex("res/building1.png")
+	do @building2Tex :: draw@makeTex("res/building2.png")
+	do @effectSounds :: #list<snd@Snd>
+	do @isTutorial :: false
+	do @mode :: %title
+	
+	do ogg@init()
+	
+	{while a(wnd@act())
+		do ogg@init()
+		break a
+	end  while}
+	
+	while(wnd@act())
+		if(@mode = %next & @nextInitFunc <>& null)
+			do @nextInitFunc()
+		elif(@mode = %intermission)
+			do @intermission()
+		elif(@mode = %start)
+			do @drawFunc()
+			do @start()
+		elif(@mode = %game)
+			do @updateFunc()
+			do @drawFunc()
+		elif(@mode = %clear)
+			do @drawFunc()
+			do @clear()
+		elif(@mode = %fail)
+			do @drawFunc()
+			do @lose()
+		elif(@mode = %tutorial)
+			do @tutorial()
+		else
+			do @updateFunc :: @update
+			do @drawFunc :: @draw
+			
+			do @title()
+			do @nextInitFunc :: @stage1Init
+			do @mode :: %next
+		end if
+		do draw@render(60)
+	end while
+end func
+
+func title()
+	const s: []char :: "PRESS Z KEY"
+	var cnt: int :: 0
+	do @bgm :: snd@makeSnd(@mainBGM, false)
+	do @bgm.playLoop(0.0)
+	while(wnd@act())
+		do cnt :+ 1
+		do @drawBackground()
+		
+		do @playerTex.drawRot(80.0, 80.0, 40.0, 40.0, 0.0, 0.0, @playerSize, @playerSize, 20.0, 20.0, lib@toRad(cnt $ float * 10.0), draw@white)
+		do @unit1Tex.drawRot(600.0, 400.0, 40.0, 40.0, 0.0, 0.0, @unit1Size, @unit1Size, 20.0, 20.0, lib@toRad(-cnt $ float * 10.0), draw@white)
+		do @planet1Tex.drawRot((@winW - @planetSize) / 2.0, (@winH - @planetSize) / 2.0, @planetSize, @planetSize, 0.0, 0.0, @planetSize, @planetSize, @planetSize / 2.0, @planetSize / 2.0, lib@toRad(cnt $ float * 20.0), draw@white)
+		
+		do @richText(@largeXFont, @gameTitle, (@winW - (@largeXFontSize $ float) * ((^@gameTitle) $ float)) / 2.0, @winH / 2.0 - (@largeXFontSize $ float), draw@white, 0xFF0000FF)
+		do @richText(@largeFont, s, (@winW - (@largeFontSize $ float) * ((^s) $ float)) / 2.0, @winH / 2.0 + (@largeFontSize $ float) * 4.0, draw@white, 0xFF0000FF)
+		
+		if(input@pad(0, %a) = 1)
+			do @bgm.stop()
+			
+			ret
+		end if
+		do draw@render(60)
+		
+	end while
+	
+end func
+
+
+func tutorial()
+	do @unitGenerators :: [@unit1Generator, @unit2Generator]
+	do @commonInit(10, @planet1Tex, 0.0, 10, 120, 0, "チュートリアル")
+	do @startTime :: lib@sysTime()
+	do @advices :: ["チュートリアルを開始します。*Zキー*を押してください", "操作の説明です。左右キーでプレイヤーを動かしてください", "続いて、Zキーを押してユニットを生成してください。生成されたユニットは自動で動きます", "Xキーで生成するユニットを変更してみましょう。ユニットを生成すると赤枠に示したゲージが減少します。このゲージが0のときは新たにユニットを生成できません", "侵略する星の原住民は住処を守ろうと抵抗してきます。ユニットを生成して殲滅してください", "敵を全滅させるか、ユニットを侵略させて拠点を破壊するとその領域を制圧できます", "赤枠に示した場所に表示されているのがそれぞれ*制限時間*と*司令船の体力*です。どちらかが0になるとゲームオーバーとなります。体力は敵の攻撃によって減少します", "実際には星は自転しています。また、敵は数多くいます。実戦形式で練習しましょう。ESCキーまたは侵略成功・失敗でチュートリアルが終了します"]
+	
+	var progress: int :: 0
+	var flags: bit8 :: 0b8
+	var cnt: int :: 0
+	var adviceIndex: int :: 0
+	var adviceCount: int :: 0
+	
+	do @mode :: %tutorial
+	while(wnd@act() & @mode = %tutorial)
+		if(progress = 1 | progress = 2 | progress = 3 | progress = 4 | progress = 7)
+			do @update()
+		end if
+		
+		
+		if((progress = 0 | progress = 5 | progress = 6) & input@pad(0, %a) = 1)
+			do progress :+ 1
+			do adviceIndex :+ 1
+			do @adviceCount :: 0
+			if(progress = 7)
+				do @startTime :: lib@sysTime()
+				do @planetDA :: lib@toRad(1.0 / 12.0)
+				
+				do @initEnemies()
+				do @startEnemyNums :: #[^@areaNames]int
+				do @startEnemyNums.fill(0)
+				
+				for i(0, ^@areaNames - 1)
+					for j(0, lib@rnd(3, 5))
+						do @enemies[i].add(@makeEnemy1(lib@rndFloat(0.0, @areaA), @enemy1R))
+						do @startEnemyNums[i] :+ 1
+					end for
+				end for
+				do @enemyNums :: ##@startEnemyNums
+			end if
+		end if
+		if(progress = 1)
+			if(input@pad(0, %left) = 1)
+				do flags :: flags.or(1b8)
+			end if
+			if(input@pad(0, %left) = 1)
+				do flags :: flags.or(2b8)
+			end if
+			if(flags.and(3b8) = 3b8)
+				do cnt :+ 1
+				if(cnt > 60 * 5)
+					do cnt :: 0
+					do progress :+ 1
+					do flags :: 0b8
+					do adviceIndex :+ 1
+					do adviceCount :: 0
+				end if
+			end if
+		end if
+		if(progress = 2)
+			if(input@pad(0, %a) = 1)
+				do flags :: 1b8
+			end if
+			if(flags = 1b8)
+				do cnt :+ 1
+				if(cnt > 60 * 5)
+					do cnt :: 0
+					do progress :+ 1
+					do flags :: 0b8
+					do adviceIndex :+ 1
+					do adviceCount :: 0
+				end if
+			end if
+		end if
+		if(progress = 3)
+			if(input@pad(0, %b) = 1)
+				do flags :: 1b8
+			end if
+			if(flags = 1b8)
+				do cnt :+ 1
+				if(cnt > 60 * 5)
+					do cnt :: 0
+					do progress :+ 1
+					do flags :: 0b8
+					do adviceIndex :+ 1
+					do adviceCount :: 0
+					do @enemies[4].add(@makeEnemy1(@areaA / 2.0, @enemy1R))
+					do @startEnemyNums[4] :: 1
+					do @enemyNums[4] :: 1
+				end if
+			end if
+		end if
+		if(progress = 4 & @enemyNums[4] = 0)
+			do cnt :: 0
+			do progress :+ 1
+			do flags :: 0b8
+			do adviceIndex :+ 1
+			do adviceCount :: 0
+		end if
+		
+		do @adviceIndex :: adviceIndex
+		do @adviceCount :: adviceCount
+		do @adviceCharCount :: adviceCount / 4
+		do adviceCount :+ 1
+		
+		do @draw()
+		if(progress = 6)
+			do draw@rectLine(@rightX, 10.0, @winW - @rightX - 5.0, 50.0, 0xFFFF0000)
+			do draw@rectLine(@rightX + 1.0, 10.0 + 1.0, @winW - @rightX - 5.0 - 2.0, 50.0 - 2.0, 0xFFFF0000)
+		end if
+		if(progress = 3)
+			do draw@rectLine(@rightX, 224.0, @winW - @rightX - 5.0, 12.0, 0xFFFF0000)
+			do draw@rectLine(@rightX + 1.0, 224.0 + 1.0, @winW - @rightX - 5.0 - 2.0, 12.0 - 2.0, 0xFFFF0000)
+		end if
+		if(progress = 5)
+			do draw@rectLine(@rightX, 70.0, @winW - @rightX - 5.0, 120.0, 0xFFFF0000)
+			do draw@rectLine(@rightX + 1.0, 70.0 + 1.0, @winW - @rightX - 5.0 - 2.0, 120.0 - 2.0, 0xFFFF0000)
+			
+			do draw@rectLine(@planetCX - @planetR / 4.0, @planetCY - @planetR, @planetR / 2.0, @planetR * 0.5, 0xFFFF0000)
+			do draw@rectLine(@planetCX - @planetR / 4.0 + 1.0, @planetCY - @planetR + 1.0, @planetR / 2.0 - 2.0, @planetR * 0.5 - 2.0, 0xFFFF0000)
+		end if
+		do draw@render(60)
+	end while
+	
+	do @stage1Init()
+	
+	do @mode :: %start
+	do @isTutorial :: false
+	
+end func
+
+
+func isFailedStage(): bool
+	ret(@currentTime >= @maxTime) | (input@pad(0, %menu) > 3) | @player.isDead()
+end func
+
+func isClearStage(): bool
+	for i(0, ^@areaNames - 1)
+		if(!@isClearArea(i))
+			ret false
+		end if
+	end for
+	ret true
+end func
+
+
+func isClearArea(i: int): bool
+	ret @enemyNums[i] = 0 | @sinryaku[i] >= @sinryakuGoal
+end func
+
+func intermission()
+	do @drawBackground()
+	do @drawText(@winW / 5.0, @winH / 3.0, @winW / 5.0 * 3.0, @intermissionSerifs[@intermissionCnt], @fadeCount, lib@intMax, @largeFontSize, @largeFont, @largeBFont)
+	if(@fadeCount < 255)
+		do @fadeCount :: lib@min(@fadeCount + 5, 250)
+	end if
+	if(input@pad(0, %a) = 1)
+		do @intermissionCnt :+ 1
+		do @fadeCount :: 0
+		if(@intermissionCnt = ^@intermissionSerifs)
+			do @mode :: %start
+		end if
+	end if
+	
+	if(@isTutorial & input@pad(0, %b) = 1)
+		do @mode :: %tutorial
+	end if
+end func
+
+{ スプラッシュ画面の描画 }
+func start()
+	{ 枠をまずね }
+	do draw@rect(@splashX, @splashY, @splashW, @splashH, 0xA5392CFF)
+	do draw@line(@splashX, @splashY, @splashX + @splashW, @splashY, 0xFF827507)
+	do draw@line(@splashX, @splashY + @splashH, @splashX + @splashW, @splashY + @splashH, 0xFF827507)
+	
+	{ 文字の描画 }
+	do @largeXFont.draw(@splashX + (@largeXFontSize $ float), @splashY + (@largeXFontSize $ float), "Invade " ~ @stageNum.toStr() ~ ": " ~ @stageTitle, draw@white)
+	do @largeFont.draw(@splashX + @splashW / 12.0, @splashY + @splashH / 2.0, "殲滅目標：敵全体の殲滅", draw@white)
+	do @largeFont.draw(@splashX + @splashW / 12.0, @splashY + @splashH / 2.0 + (@largeFontSize $ float) * 1.5, "侵略目標：" ~ @sinryakuGoal.toStr() ~ "体", draw@white)
+	do @largeFont.draw(@splashX + @splashW / 12.0, @splashY + @splashH / 2.0 + (@largeFontSize $ float) * 3.0, "制限時間：" ~ @maxTime.toStr() ~ "秒", draw@white)
+	
+	if(input@pad(0, %a) = 5)
+		do @mode :: %game
+		do @bgm.playLoop(0.0)
+		do @startTime :: lib@sysTime()
+	end if
+	
+end func
+
+func clear()
+	do @bgm.stop()
+	
+	{ 枠をまずね }
+	do draw@rect(@splashX, @splashY, @splashW, @splashH, 0xA5392CFF)
+	do draw@line(@splashX, @splashY, @splashX + @splashW, @splashY, 0xFF827507)
+	do draw@line(@splashX, @splashY + @splashH, @splashX + @splashW, @splashY + @splashH, 0xFF827507)
+	
+	{ 文字の描画 }
+	do @largeXFont.draw(@splashX + (@largeXFontSize $ float), @splashY + (@largeXFontSize $ float), "Invade " ~ @stageNum.toStr() ~ ": " ~ @stageTitle, draw@white)
+	do @richText(@largeFont, "Stage CLEAR", @splashX + @splashW / 12.0, @splashY + @splashH / 2.0 + (@largeFontSize $ float) * 1.5, draw@white, 0xFF827507)
+	
+	if(input@pad(0, %a) = 5)
+		do @mode :: %next
+	end if
+end func
+
+func lose()
+	do @bgm.stop()
+	
+	{ 枠をまずね }
+	do draw@rect(@splashX, @splashY, @splashW, @splashH, 0xA5C7260E)
+	do draw@line(@splashX, @splashY, @splashX + @splashW, @splashY, 0xFF827507)
+	do draw@line(@splashX, @splashY + @splashH, @splashX + @splashW, @splashY + @splashH, 0xFF827507)
+	
+	{ 文字の描画 }
+	do @largeXFont.draw(@splashX + (@largeXFontSize $ float), @splashY + (@largeXFontSize $ float), "Invade " ~ @stageNum.toStr() ~ ": " ~ @stageTitle, draw@white)
+	do @richText(@largeFont, "Stage FAILURE", @splashX + @splashW / 12.0, @splashY + @splashH / 2.0 + (@largeFontSize $ float) * 1.5, draw@white, 0xFF000000)
+	
+	if(input@pad(0, %a) > 5)
+		do @mode :: %title
+	end if
+end func
+
+
+func update()
+	do @frameCount :+ 1
+	do @currentTime :: (lib@sysTime() - @startTime) / 1000
+	do @updatePlanet()
+	do @player.update(0)
+	do @updateObjects(@units)
+	do @updateObjects(@enemies)
+	do @updateObjects(@unitShots)
+	do @updateObjects(@enemyShots)
+	do @checkHit(@enemies, &@unitShots)
+	do @checkHit(@units, &@enemyShots)
+	do @checkPlayerHit(&@enemyShots)
+	
+	{ 生成するユニットの選択 }
+	if(input@pad(0, %b) = 1)
+		do @generatorIndex :+ 1
+	end if
+	do @generatorIndex :: (@generatorIndex + (^@unitGenerators)) % (^@unitGenerators)
+	
+	for i(0, ^@unitGenerators - 1)
+		if(@frameCount % @unitGenerators[i].recover_freq = 0)
+			do @unitGenerators[i].current_energy :: lib@min(@unitGenerators[i].current_energy + @unitGenerators[i].recover_amount, @unitGenerators[i].max_energy)
+		end if
+	end for
+	
+	if(@isClearFunc())
+		do @mode :: %clear
+	elif(@isLoseFunc())
+		do @mode :: %fail
+	end if
+	
+	{ アドバイスメッセージの表示 }
+	var nextAdviceIndex: int :: @adviceFunc()
+	if(nextAdviceIndex <> @adviceIndex)
+		do @adviceIndex :: nextAdviceIndex
+		do @adviceCharCount :: 0
+		do @adviceCount :: 0
+	end if
+	do @adviceCount :+ 1
+	do @adviceCharCount :: @adviceCount / 4
+	
+	{ 終了しているSEの削除 }
+	do @effectSounds.head()
+	while(!@effectSounds.term())
+		if(@effectSounds.get().playing())
+			do @effectSounds.next()
+		else
+			do @effectSounds.del()
+		end if
+	end while
+	
+	{ プレイヤーがダメージを受けたときの赤いマスクのフレーム数カウント }
+	do @isPlayerDamaged :: lib@max(@isPlayerDamaged - 1, 0)
+end func
+
+
+func drawAdvice()
+	do @drawText(@rightX, 300.0, @winW - @rightX - (@mainFontSize $ float), @advices[@adviceIndex], 0xFF, @adviceCharCount, @mainFontSize, @mainTFont, @mainFont)
+end func
+
+func drawParams()
+	{ 残り時間 }
+	do @mainFont.draw(@rightX, 10.0, "残り時間: " ~ (@maxTime - @currentTime).toStr() ~ "秒", draw@white)
+	
+	{ 体力と体力ゲージ }
+	var lifeRectX: float :: @rightX + (@mainFontSize $ float) * 3.5
+	var lifeRectY: float :: 30.0 + (@mainFontSize $ float) * 0.25
+	var lifeRectW: float :: @winW - lifeRectX - 10.0
+	var lifeRectH: float :: (@mainFontSize $ float) * 1.5
+	var lifePercent: int :: 100 * @player.getLife() / @maxPlayerLife
+	if(lifePercent > 30)
+		do draw@rectLine(lifeRectX, lifeRectY, lifeRectW, lifeRectH, 0xFF00CC00)
+		do draw@rect(lifeRectX, lifeRectY, lifeRectW * (lifePercent $ float / 100.0), lifeRectH, 0xFF00CC00)
+	else
+		do draw@rectLine(lifeRectX, lifeRectY, lifeRectW, lifeRectH, 0xFFCC0000)
+		do draw@rect(lifeRectX, lifeRectY, lifeRectW * (lifePercent $ float / 100.0), lifeRectH, 0xFFCC0000)
+	end if
+	do @mainFont.draw(@rightX, 30.0, "体力: " ~ lifePercent.toStr() ~ "%", draw@white)
+	
+	{ 各侵略具合 }
+	for i(0, ^@areaNames - 1)
+		do @drawParam(i)
+	end for
+	
+	{ ユニットの一覧 }
+	var x: float :: 0.0
+	for i(0, ^@unitGenerators - 1)
+		var g: @UnitGenerator :: @unitGenerators[i]
+		if(i = @generatorIndex)
+			do draw@rectLine(@rightX + x - 2.5, 200.0 - 2.5, g.w + 5.0, g.h + 5.0, 0xFFFFFFFF)
+		end if
+		do g.tex.draw(@rightX + x, 200.0, 0.0, 0.0, g.w, g.h, draw@white)
+		do x :+ g.w + 5.0
+	end for
+	
+	{ ユニットの説明と生成ゲージ }
+	var g: @UnitGenerator :: @unitGenerators[@generatorIndex]
+	do draw@rectLine(@rightX, 225.0, @winW - @rightX - 10.0, 10.0, draw@white)
+	do draw@rect(@rightX, 225.0, (@winW - @rightX - 10.0) * (g.current_energy $ float / (g.max_energy $ float)), 10.0, draw@white)
+	
+	do @drawText(@rightX, 240.0, @winW - @rightX - (@mainFontSize $ float), "*" ~ g.name ~ "*\n" ~ g.desc, 0xFF, lib@intMax, @mainFontSize, @mainTFont, @mainFont)
+end func
+
+func drawParam(i: int)
+	var senmetsuPer: int
+	if(@startEnemyNums[i] = 0)
+		do senmetsuPer :: 100
+	else
+		do senmetsuPer :: 100 - 100 * @enemyNums[i] / @startEnemyNums[i]
+	end if
+	var sinryakuPer: int :: 100 * @sinryaku[i] / @sinryakuGoal
+	if(@isAreaClearFunc(i))
+		do @richText(@mainFont, @areaNames[i] ~ ": ", @rightX, 70.0 + (i $ float) * 20.0, draw@white, 0xFF0000FF)
+	else
+		do @mainFont.draw(@rightX, 70.0 + (i $ float) * 20.0, @areaNames[i] ~ ": ", draw@white)
+	end if
+	do @mainFont.draw(@rightX + (@mainFontSize $ float) * 3.0, 70.0 + (i $ float) * 20.0, "殲滅度" ~ senmetsuPer.toStr() ~ "%", draw@white)
+	do @mainFont.draw(@rightX + (@mainFontSize $ float) * 12.0, 70.0 + (i $ float) * 20.0, "侵略度" ~ sinryakuPer.toStr() ~ "%", draw@white)
+end func
+
+func draw()
+	var x: float
+	var y: float
+	
+	do @drawBackground()
+	do @drawPlanet()
+	do @player.getXY(0.0, @planetCX, @planetCY, &x, &y)
+	do @player.draw(0.0, x, y)
+	do @drawObjects(@units)
+	do @drawObjects(@enemies)
+	do @drawObjects(@unitShots)
+	do @drawObjects(@enemyShots)
+	do @drawParams()
+	do @drawAdvice()
+	
+	if(@isPlayerDamaged > 0)
+		do draw@rect(0.0, 0.0, @winW, @winH, 0x33CC0000)
+	end if
+end func
+
+func commonInit(maxPlayerLife: int, planetTex: draw@Tex, planetDA: float, sinryakuGoal: int, timeLimit: int, stageNum: int, stageTitle: []char)
+	do @maxPlayerLife :: maxPlayerLife
+	do @player :: @makePlayer()
+	do @isPlayerDamaged :: 0
+	
+	do @planetTex :: planetTex
+	do @planetA :: 0.0
+	do @planetDA :: planetDA
+	
+	do @initUnits()
+	do @initShots()
+	do @initEnemies()
+	
+	do @startEnemyNums :: #[^@areaNames]int
+	do @startEnemyNums.fill(0)
+	
+	do @sinryakuGoal :: sinryakuGoal
+	do @sinryaku :: #[^@areaNames]int
+	do @sinryaku.fill(0)
+	
+	do @maxTime :: timeLimit
+	do @stageNum :: stageNum
+	do @stageTitle :: stageTitle
+	
+	do @isClearFunc :: @isClearStage
+	do @isLoseFunc :: @isFailedStage
+	do @isAreaClearFunc :: @isClearArea
+	
+	do @intermissionCnt :: 0
+	do @fadeCount :: 0
+	
+	do @adviceCharCount :: 0
+	do @adviceCount :: 0
+	do @adviceIndex :: 0
+	
+	do @generatorIndex :: 0
+	for i(0, ^@unitGenerators - 1)
+		do @unitGenerators[i].current_energy :: @unitGenerators[i].max_energy
+	end for
+	
+	do @mode :: %intermission
+	do @frameCount :: 0
+	do @isTutorial :: false
+end func
+
+func stage1Advice(): int
+	ret 0
+end func
+
+
+
+func stage1Init()
+	{ これは common Init よりも先 }
+	do @unitGenerators :: [@unit1Generator, @unit2Generator]
+	do @bgm :: snd@makeSnd(@mainBGM, false)
+	
+	do @commonInit(10, @planet1Tex, lib@toRad(1.0 / 12.0), 20, 150, 1, "たこ焼き惑星の侵略")
+	do @buildingTex :: @building1Tex
+	for i(0, ^@areaNames - 1)
+		for j(0, lib@rnd(1, 10))
+			do @enemies[i].add(@makeEnemy1(lib@rndFloat(0.0, @areaA), @enemy1R))
+			do @startEnemyNums[i] :+ 1
+		end for
+	end for
+	do @enemyNums :: ##@startEnemyNums
+	
+	do @nextInitFunc :: @stage2Init
+	
+	do @intermissionSerifs :: ["「たこ焼きっぽい星を発見しました。侵略しますか？」", "「当然、侵略しよう。我々は*インベーダー*なのだから」", "「――了解。*Xキー*でチュートリアルを閲覧可能です」", "「*Xキー*でチュートリアルだな。*Zキー*なら侵略開始か……」"]
+	do @isTutorial :: true
+	
+	do @adviceFunc :: @stage1Advice
+	do @advices :: ["*Zキー*でユニット生成\n*Xキー*でユニット選択\n*←→キー*で移動です\n\n各エリアの敵を殲滅、あるいはユニットを10体以上侵略させてください"]
+end func
+
+func stage2Init()
+	do @unitGenerators :: [@unit1Generator, @unit2Generator, @unit3Generator]
+	do @bgm :: snd@makeSnd(@mainBGM, false)
+	
+	do @commonInit(10, @planet2Tex, lib@toRad(1.0 / 12.0), 20, 150, 2, "貝の星の侵略")
+	do @buildingTex :: @building2Tex
+	for i(0, ^@areaNames - 1)
+		for j(0, lib@rnd(1, 10))
+			do @enemies[i].add(@makeEnemy2(lib@rndFloat(0.0, @areaA), @enemy1R))
+			do @startEnemyNums[i] :+ 1
+		end for
+	end for
+	do @enemyNums :: ##@startEnemyNums
+	do @nextInitFunc :: @stage3Init
+	
+	do @intermissionSerifs :: ["「貝類が多く存在する星を発見しました」", "「何、たこ焼きを食べようと思っていたところなのに、今度は貝か。仕方ない、侵略しよう」", "「――御意」"]
+	
+	do @adviceFunc :: @stage1Advice
+	do @advices :: ["新たに製造した*盾ユニット*が使えます。相手のビーム攻撃への対策として使用してください"]
+end func
+
+func stage3DrawParams()
+	{ 残り時間 }
+	do @mainFont.draw(@rightX, 10.0, "残り時間: " ~ (@maxTime - @currentTime).toStr() ~ "秒", draw@white)
+	
+	{ 体力と体力ゲージ }
+	var lifeRectX: float :: @rightX + (@mainFontSize $ float) * 3.5
+	var lifeRectY: float :: 30.0 + (@mainFontSize $ float) * 0.25
+	var lifeRectW: float :: @winW - lifeRectX - 10.0
+	var lifeRectH: float :: (@mainFontSize $ float) * 1.5
+	var lifePercent: int :: 100 * @player.getLife() / @maxPlayerLife
+	if(lifePercent > 30)
+		do draw@rectLine(lifeRectX, lifeRectY, lifeRectW, lifeRectH, 0xFF00CC00)
+		do draw@rect(lifeRectX, lifeRectY, lifeRectW * (lifePercent $ float / 100.0), lifeRectH, 0xFF00CC00)
+	else
+		do draw@rectLine(lifeRectX, lifeRectY, lifeRectW, lifeRectH, 0xFFCC0000)
+		do draw@rect(lifeRectX, lifeRectY, lifeRectW * (lifePercent $ float / 100.0), lifeRectH, 0xFFCC0000)
+	end if
+	do @mainFont.draw(@rightX, 30.0, "体力: " ~ lifePercent.toStr() ~ "%", draw@white)
+	
+	
+	{ ユニットの一覧 }
+	var x: float :: 0.0
+	for i(0, ^@unitGenerators - 1)
+		var g: @UnitGenerator :: @unitGenerators[i]
+		if(i = @generatorIndex)
+			do draw@rectLine(@rightX + x - 2.5, 200.0 - 2.5, g.w + 5.0, g.h + 5.0, 0xFFFFFFFF)
+		end if
+		do g.tex.draw(@rightX + x, 200.0, 0.0, 0.0, g.w, g.h, draw@white)
+		do x :+ g.w + 5.0
+	end for
+	
+	{ ユニットの説明と生成ゲージ }
+	var g: @UnitGenerator :: @unitGenerators[@generatorIndex]
+	do draw@rectLine(@rightX, 225.0, @winW - @rightX - 10.0, 10.0, draw@white)
+	do draw@rect(@rightX, 225.0, (@winW - @rightX - 10.0) * (g.current_energy $ float / (g.max_energy $ float)), 10.0, draw@white)
+	
+	do @drawText(@rightX, 240.0, @winW - @rightX - (@mainFontSize $ float), "*" ~ g.name ~ "*\n" ~ g.desc, 0xFF, lib@intMax, @mainFontSize, @mainTFont, @mainFont)
+	
+	do draw@rectLine(10.0, 10.0, @rightX - 60.0, 20.0, 0xFFCCCC00)
+	do draw@rect(10.0, 10.0, (@rightX - 60.0) * (@turtleLife $ float / (@turtleMaxLife $ float)), 20.0, 0xFFCCCC00)
+end func
+
+func stage3IsClearStage(): bool
+	ret @turtleLife <= 0
+end func
+
+
+func stage3IsClearArea(i: int): bool
+	ret false
+end func
+
+func stage3Update()
+	do @update()
+	
+	var t: int :: @frameCount % 480
+	if(t < 300)
+		do @isTurtleGuard :: false
+	else
+		do @isTurtleGuard :: true
+	end if
+	
+	if(t = 180)
+		do @isTurtleAttack :: true
+	else
+		do @isTurtleAttack :: false
+	end if
+end func
+
+func stage3Draw()
+	var x: float
+	var y: float
+	
+	do @drawBackground()
+	do @player.getXY(0.0, @planetCX, @planetCY, &x, &y)
+	do @player.draw(0.0, x, y)
+	do @drawObjects(@units)
+	do @drawObjects(@enemies)
+	do @drawObjects(@unitShots)
+	do @drawObjects(@enemyShots)
+	do @planetTex.drawRot(@planetX, @planetY, @planetR * 2.0, @planetR * 2.0, 0.0, 0.0, @planetSize, @planetSize, @planetR, @planetR, @planetA, draw@white)
+	do @stage3DrawParams()
+	do @drawAdvice()
+	
+	if(@isPlayerDamaged > 0)
+		do draw@rect(0.0, 0.0, @winW, @winH, 0x33CC0000)
+	end if
+end func
+
+func stage3Init()
+	do @unitGenerators :: [@unit1Generator, @unit2Generator, @unit3Generator, @unit4Generator]
+	do @commonInit(10, @planet3Tex, lib@toRad(1.0 / 12.0), 15, 500, 3, "巨大なカメとの戦い")
+	do @bgm :: snd@makeSnd(@turtleBGM, false)
+	
+	do @turtleLife :: @turtleMaxLife
+	
+	do @enemies[5].add(@makeTurtleHead(@areaA / 2.0, @turtleR))
+	do @enemies[2].add(@makeTurtleTale(@areaA / 2.0, @turtleR))
+	do @enemies[0].add(@makeTurtleLeg(@areaA / 2.0, @turtleR))
+	do @enemies[1].add(@makeTurtleLeg(@areaA / 2.0, @turtleR))
+	do @enemies[3].add(@makeTurtleLeg(@areaA / 2.0, @turtleR))
+	do @enemies[4].add(@makeTurtleLeg(@areaA / 2.0, @turtleR))
+	
+	for i(0, ^@areaNames - 1)
+		for j(0, lib@rnd(1, 5))
+			do @enemies[i].add(@makeEnemy1(lib@rndFloat(0.0, @areaA), @enemy1R))
+			do @startEnemyNums[i] :+ 1
+			
+		end for
+		
+		for j(0, lib@rnd(1, 5))
+			do @enemies[i].add(@makeEnemy2(lib@rndFloat(0.0, @areaA), @enemy2R))
+			do @startEnemyNums[i] :+ 1
+			
+		end for
+	end for
+	do @enemyNums :: ##@startEnemyNums
+	
+	
+	do @intermissionSerifs :: ["「――巨大生物の襲来を感知。回避できません」", "「間もなく戦闘に入ります。備えてください」", "「やれやれ、ゆっくりたこ焼きを食べたいものだ」"]
+	
+	do @nextInitFunc :: null
+	do @updateFunc :: @stage3Update
+	do @drawFunc :: @stage3Draw
+	
+	do @isClearFunc :: @stage3IsClearStage
+	do @isAreaClearFunc :: @stage3IsClearArea
+	
+	do @adviceFunc :: @stage1Advice
+	do @advices :: ["カメだけあって、防御力はたカメのようです\n侵略によって動きを止めてから攻撃すると有効です"]
+end func
