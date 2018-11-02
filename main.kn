@@ -77,6 +77,8 @@ const turtleMaxLife: int :: 100
 const turtleSize: float :: 32.0
 const turtleR: float :: @planetR + @turtleSize / 2.0
 
+const bombSize: float :: 32.0
+
 { ゲームシステム変数 }
 var mainFont: draw@Font
 var mainTFont: draw@Font
@@ -118,7 +120,6 @@ var generatorIndex: int
 
 var enemy1Tex: draw@Tex
 var enemy2Tex: draw@Tex
-{ var enemy3Tex: draw@Tex }
 var enemies: []list<@O>
 
 var unitShot1Tex: draw@Tex
@@ -126,6 +127,8 @@ var unitShots: []list<@Shot>
 var enemyShot1Tex: draw@Tex
 var enemyShot2Tex: draw@Tex
 var enemyShots: []list<@Shot>
+
+var bombs: []list<@O>
 
 var maxTime: int
 var startTime: int
@@ -172,6 +175,7 @@ var isTurtleAttack: bool
 var isTurtleGuard: bool
 
 var bgm: snd@Snd
+var bombTex: draw@Tex
 
 { 便利関数 }
 func upperBound(xs: []kuin@Class, x: kuin@Class): int
@@ -249,6 +253,10 @@ class O()
 		end if
 	end func
 	
+	+func setSize(size: float): float
+		do me.size :: size
+	end func
+	
 	+func getA(): float
 		ret(me.a % @pi2 + @pi2) % @pi2
 	end func
@@ -322,6 +330,44 @@ class O()
 	end func
 end class
 
+class Bomb(@O)
+	var frame: int
+	*func ctor()
+		do me.frame :: 0
+	end func
+	
+	+*func update(i: int)
+		do me.frame :+ 1
+	end func
+	
+	+*func isDead(): bool
+		ret me.frame > 10
+	end func
+	
+	+*func getTex(): draw@Tex
+		ret @bombTex
+	end func
+	
+	+*func getXY(a: float, cx: float, cy: float, x: &float, y: &float)
+		do a :: me.a + a
+		do x :: cx + me.r * lib@cos(a)
+		do y :: cy + me.r * lib@sin(a)
+	end func
+	
+	+*func draw(a: float, x: float, y: float)
+		do a :: me.a + a
+		var s: float :: me.getSize()
+		do me.getTex().drawRot(x - s, y - s, me.getSize(), me.getSize(), 0.0, 0.0, @bombSize, @bombSize, s, s, a + lib@pi / 2.0, draw@white)
+	end func
+end class
+
+func makeBomb(r: float, a: float, s: float): @Bomb
+	var b: @Bomb :: #@Bomb
+	do b.r :: r
+	do b.a :: a
+	do b.setSize(s)
+	ret b
+end func
 
 func updateObjects(os: []list<@O>)
 	for i(0, ^@areaNames - 1)
@@ -475,6 +521,10 @@ class Unit1(@U)
 			do @unitShots[i].add(@makeUnitShot1(me.a, me.r))
 		end if
 	end func
+	
+	+*func onDead(i: int)
+		do @bombs[i].add(@makeBomb(me.r, me.a, me.size))
+	end func
 end class
 
 func makeUnit1(a: float, r: float): @Unit1
@@ -505,6 +555,10 @@ class Unit2(@U)
 	
 	+*func update(i: int)
 		do me.r :+ me.dr
+	end func
+	
+	+*func onDead(i: int)
+		do @bombs[i].add(@makeBomb(me.r, me.a, me.size))
 	end func
 end class
 
@@ -548,6 +602,10 @@ class Unit3(@U)
 			do me.a :: me.a.clamp(0.0, @areaA)
 		end if
 	end func
+	
+	+*func onDead(i: int)
+		do @bombs[i].add(@makeBomb(me.r, me.a, me.size))
+	end func
 end class
 
 func makeUnit3(a: float, r: float): @Unit3
@@ -588,6 +646,7 @@ end func
 class E(@O)
 	+*func onDead(i: int)
 		do @enemyNums[i] :- 1
+		do @bombs[i].add(@makeBomb(me.r, me.a, me.size))
 	end func
 end class
 
@@ -1136,6 +1195,7 @@ func main()
 	do @planet3Tex :: draw@makeTex("res/turtle.png")
 	do @building1Tex :: draw@makeTex("res/building1.png")
 	do @building2Tex :: draw@makeTex("res/building2.png")
+	do @bombTex :: draw@makeTex("res/bomb.png")
 	do @effectSounds :: #list<snd@Snd>
 	do @isTutorial :: false
 	do @mode :: %title
@@ -1439,6 +1499,7 @@ func update()
 	do @updateObjects(@enemies)
 	do @updateObjects(@unitShots)
 	do @updateObjects(@enemyShots)
+	do @updateObjects(@bombs)
 	do @checkHit(@enemies, &@unitShots)
 	do @checkHit(@units, &@enemyShots)
 	do @checkPlayerHit(&@enemyShots)
@@ -1562,6 +1623,8 @@ func draw()
 	do @drawObjects(@enemies)
 	do @drawObjects(@unitShots)
 	do @drawObjects(@enemyShots)
+	do @drawObjects(@bombs)
+	
 	do @drawParams()
 	do @drawAdvice()
 	
@@ -1578,6 +1641,11 @@ func commonInit(maxPlayerLife: int, planetTex: draw@Tex, planetDA: float, sinrya
 	do @planetTex :: planetTex
 	do @planetA :: 0.0
 	do @planetDA :: planetDA
+	
+	do @bombs :: #[^@areaNames]list<@O>
+	for i(0, ^@areaNames - 1)
+		do @bombs[i] :: #list<@O>
+	end for
 	
 	do @initUnits()
 	do @initShots()
@@ -1745,6 +1813,7 @@ func stage3Draw()
 	do @drawObjects(@enemies)
 	do @drawObjects(@unitShots)
 	do @drawObjects(@enemyShots)
+	do @drawObjects(@bombs)
 	do @planetTex.drawRot(@planetX, @planetY, @planetR * 2.0, @planetR * 2.0, 0.0, 0.0, @planetSize, @planetSize, @planetR, @planetR, @planetA, draw@white)
 	do @stage3DrawParams()
 	do @drawAdvice()
@@ -1784,7 +1853,7 @@ func stage3Init()
 	do @enemyNums :: ##@startEnemyNums
 	
 	
-	do @intermissionSerifs :: ["「――巨大生物の襲来を感知。回避できません」", "「間もなく戦闘に入ります。備えてください」", "「やれやれ、ゆっくりたこ焼きを食べたいものだ」"]
+	do @intermissionSerifs :: ["「――巨大生物の接近を感知。回避できません」", "「間もなく戦闘に入ります。備えてください」", "「やれやれ、ゆっくりたこ焼きを食べたいものだ」"]
 	
 	do @nextInitFunc :: null
 	do @updateFunc :: @stage3Update
